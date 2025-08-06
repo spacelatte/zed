@@ -75,6 +75,7 @@ impl DiagnosticsSlashCommand {
                     query.as_str(),
                     None,
                     false,
+                    true,
                     100,
                     &cancellation_flag,
                     executor,

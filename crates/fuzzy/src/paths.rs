@@ -89,13 +89,20 @@ pub fn match_fixed_path_set(
     worktree_id: usize,
     query: &str,
     smart_case: bool,
+    penalize_length: bool,
     max_results: usize,
 ) -> Vec<PathMatch> {
     let lowercase_query = query.to_lowercase().chars().collect::<Vec<_>>();
     let query = query.chars().collect::<Vec<_>>();
     let query_char_bag = CharBag::from(&lowercase_query[..]);
 
-    let mut matcher = Matcher::new(&query, &lowercase_query, query_char_bag, smart_case, true);
+    let mut matcher = Matcher::new(
+        &query,
+        &lowercase_query,
+        query_char_bag,
+        smart_case,
+        penalize_length,
+    );
 
     let mut results = Vec::new();
     matcher.match_candidates(
@@ -123,6 +130,7 @@ pub async fn match_path_sets<'a, Set: PathMatchCandidateSet<'a>>(
     query: &str,
     relative_to: Option<Arc<Path>>,
     smart_case: bool,
+    penalize_length: bool,
     max_results: usize,
     cancel_flag: &AtomicBool,
     executor: BackgroundExecutor,
@@ -152,8 +160,13 @@ pub async fn match_path_sets<'a, Set: PathMatchCandidateSet<'a>>(
                 scope.spawn(async move {
                     let segment_start = segment_idx * segment_size;
                     let segment_end = segment_start + segment_size;
-                    let mut matcher =
-                        Matcher::new(query, lowercase_query, query_char_bag, smart_case, true);
+                    let mut matcher = Matcher::new(
+                        query,
+                        lowercase_query,
+                        query_char_bag,
+                        smart_case,
+                        penalize_length,
+                    );
 
                     let mut tree_start = 0;
                     for candidate_set in candidate_sets {

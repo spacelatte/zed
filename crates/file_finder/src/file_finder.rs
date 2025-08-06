@@ -662,6 +662,14 @@ impl Matches {
             _ => {} // Both are filename matches or both are path matches
         }
 
+        if a_panel_match.0.score == b_panel_match.0.score {
+            match (a, b) {
+                (Match::History { .. }, Match::Search(_)) => return cmp::Ordering::Greater,
+                (Match::Search(_), Match::History { .. }) => return cmp::Ordering::Less,
+                _ => {}
+            }
+        }
+
         a_panel_match.cmp(b_panel_match)
     }
 
@@ -741,6 +749,7 @@ fn matching_history_items<'a>(
                 candidates,
                 worktree.to_usize(),
                 query.path_query(),
+                false,
                 false,
                 max_results,
             )
@@ -897,6 +906,7 @@ impl FileFinderDelegate {
                 candidate_sets.as_slice(),
                 query.path_query(),
                 relative_to,
+                false,
                 false,
                 100,
                 &cancel_flag,
