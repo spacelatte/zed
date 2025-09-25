@@ -1050,41 +1050,43 @@ fn build_command(
 ) -> Result<CommandTemplate> {
     use std::fmt::Write as _;
 
-    let mut exec = String::from("exec env -C ");
+    let mut script = String::new();
     if let Some(working_dir) = working_dir {
         let working_dir = RemotePathBuf::new(working_dir, ssh_path_style).to_string();
 
         // shlex will wrap the command in single quotes (''), disabling ~ expansion,
-        // replace with with something that works
+        // replace with something that works
         const TILDE_PREFIX: &'static str = "~/";
-        if working_dir.starts_with(TILDE_PREFIX) {
+        let working_dir = if working_dir.starts_with(TILDE_PREFIX) {
             let working_dir = working_dir.trim_start_matches("~").trim_start_matches("/");
-            write!(exec, "\"$HOME/{working_dir}\" ",).unwrap();
+            format!("$HOME/{working_dir}")
         } else {
-            write!(exec, "\"{working_dir}\" ",).unwrap();
-        }
+            working_dir
+        };
+        write!(&mut script, "cd \"{working_dir}\" && ").unwrap();
     } else {
-        write!(exec, "\"$HOME\" ").unwrap();
-    };
-
-    for (k, v) in input_env.iter() {
-        if let Some((k, v)) = shlex::try_quote(k).ok().zip(shlex::try_quote(v).ok()) {
-            write!(exec, "{}={} ", k, v).unwrap();
-        }
+        write!(&mut script, "cd && ").unwrap();
     }
 
-    write!(exec, "{ssh_shell} ").unwrap();
+    write!(&mut script, "env ").unwrap();
+    for (k, v) in input_env.iter() {
+        if let Some((k, v)) = shlex::try_quote(k).ok().zip(shlex::try_quote(v).ok()) {
+            write!(&mut script, "{}={} ", k, v).unwrap();
+        }
+    }
     if let Some(input_program) = input_program {
-        let mut script = shlex::try_quote(&input_program)?.into_owned();
+        let command = shlex::try_quote(&input_program)?;
+        script.push_str(&command);
         for arg in input_args {
             let arg = shlex::try_quote(&arg)?;
             script.push_str(" ");
             script.push_str(&arg);
         }
-        write!(exec, "-c {}", shlex::try_quote(&script).unwrap()).unwrap();
     } else {
-        write!(exec, "-l").unwrap();
+        write!(&mut script, "exec {ssh_shell} -l").unwrap();
     };
+
+    let shell_invocation = format!("{ssh_shell} -c {}", shlex::try_quote(&script).unwrap());
 
     let mut args = Vec::new();
     args.extend(ssh_args);
@@ -1095,7 +1097,7 @@ fn build_command(
     }
 
     args.push("-t".into());
-    args.push(exec);
+    args.push(shell_invocation);
     Ok(CommandTemplate {
         program: "ssh".into(),
         args,
@@ -1133,7 +1135,7 @@ mod tests {
                 "-p",
                 "2222",
                 "-t",
-                "exec env -C \"$HOME/work\" INPUT_VA=val /bin/fish -c 'remote_program arg1 arg2'"
+                "/bin/fish -c 'cd \"$HOME/work\" && env INPUT_VA=val remote_program arg1 arg2'"
             ]
         );
         assert_eq!(command.env, env);
@@ -1164,7 +1166,7 @@ mod tests {
                 "-L",
                 "1:foo:2",
                 "-t",
-                "exec env -C \"$HOME\" INPUT_VA=val /bin/fish -l"
+                "/bin/fish -c 'cd && env INPUT_VA=val exec /bin/fish -l'"
             ]
         );
         assert_eq!(command.env, env);
